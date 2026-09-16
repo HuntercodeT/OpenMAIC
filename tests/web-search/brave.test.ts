@@ -85,6 +85,30 @@ describe('searchWithBrave', () => {
     expect((error as Error).message).not.toContain('<');
   });
 
+  it('cancels the HTML error body instead of reading it into memory', async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('<!doctype html><html>huge</html>'));
+        controller.close();
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    proxyFetchMock.mockResolvedValueOnce(
+      new Response(body, {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+
+    await searchWithBrave({ query: 'JavaScript Promise' }).catch(() => undefined);
+
+    expect(cancelled).toBe(true);
+  });
+
   it('drops an HTML error body on non-429 failures', async () => {
     proxyFetchMock.mockResolvedValueOnce(
       new Response('<!doctype html><html><body>blocked</body></html>', {

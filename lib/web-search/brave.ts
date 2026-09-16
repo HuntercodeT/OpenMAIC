@@ -111,6 +111,21 @@ export function parseBraveSearchHtml(html: string, maxResults: number): WebSearc
 const BRAVE_API_BASE_URL = 'https://api.search.brave.com';
 
 /**
+ * Read an error body only when it can plausibly be useful.
+ *
+ * Brave answers a throttled or blocked request with a full HTML challenge
+ * page. Pulling that into memory just to discard it wastes a large read, so
+ * cancel the stream as soon as the content type says it is markup.
+ */
+async function readBraveErrorDetail(res: Response): Promise<string> {
+  if (/\bhtml\b/i.test(res.headers.get('content-type') ?? '')) {
+    await res.body?.cancel().catch(() => {});
+    return '';
+  }
+  return res.text().catch(() => '');
+}
+
+/**
  * Build a Brave error message that is safe to surface to callers.
  *
  * Brave answers an over-quota or blocked request with a full HTML challenge
@@ -162,7 +177,7 @@ async function searchWithBraveApi(
   });
 
   if (!res.ok) {
-    const errorText = await res.text().catch(() => '');
+    const errorText = await readBraveErrorDetail(res);
     throw new Error(formatBraveError('Brave API', res.status, res.statusText, errorText));
   }
 
@@ -203,7 +218,7 @@ async function searchWithBraveScrape(
   });
 
   if (!res.ok) {
-    const errorText = await res.text().catch(() => '');
+    const errorText = await readBraveErrorDetail(res);
     throw new Error(formatBraveError('Brave Search', res.status, res.statusText, errorText));
   }
 
