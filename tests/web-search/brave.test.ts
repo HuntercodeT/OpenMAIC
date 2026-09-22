@@ -68,7 +68,7 @@ describe('searchWithBrave', () => {
     proxyFetchMock.mockReset();
   });
 
-  it("gives 429 a dedicated message instead of leaking Brave's HTML challenge page", async () => {
+  it("gives a keyless 429 a dedicated message instead of leaking Brave's HTML challenge page", async () => {
     proxyFetchMock.mockResolvedValueOnce(
       new Response('<!doctype html><html><body>captcha challenge</body></html>', {
         status: 429,
@@ -82,7 +82,28 @@ describe('searchWithBrave', () => {
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toContain('429');
     expect((error as Error).message).toContain('rate-limited');
+    expect((error as Error).message).toContain('configure a Brave Search API key');
     expect((error as Error).message).not.toContain('<');
+  });
+
+  it('points an API-key 429 at the plan limit instead of suggesting an API key', async () => {
+    proxyFetchMock.mockResolvedValueOnce(
+      new Response('{"type":"ErrorResponse","error":{"code":"RATE_LIMITED"}}', {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const error = await searchWithBrave({ query: 'JavaScript Promise', apiKey: 'k' }).catch(
+      (err: Error) => err,
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('Brave API');
+    expect((error as Error).message).toContain('429');
+    expect((error as Error).message).toContain('plan');
+    expect((error as Error).message).not.toContain('configure a Brave Search API key');
   });
 
   it('cancels the HTML error body instead of reading it into memory', async () => {
