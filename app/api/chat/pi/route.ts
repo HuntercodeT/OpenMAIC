@@ -1,8 +1,10 @@
+import { attachInteractiveState } from '@/lib/chat/pi/interactive-state-evidence';
 /**
  * Pi Director Chat API Endpoint
  *
- * POST /api/chat/pi - parallel PoC path for running the in-class multi-agent
- * chain as a single server-side pi agent loop.
+ * POST /api/chat/pi - default path for running the in-class multi-agent chain
+ * as a single server-side Pi agent loop. The build-time flag can disable this
+ * route together with the corresponding client path for legacy rollback.
  */
 
 import { NextRequest } from 'next/server';
@@ -66,13 +68,20 @@ export async function POST(req: NextRequest) {
       return apiError('MISSING_REQUIRED_FIELD', 400, 'Missing required field: config.agentIds');
     }
 
-    if (body.elementReference !== undefined && !isCoursewareReferenceEnabled()) {
+    if (
+      (body.elementReference !== undefined || body.interactiveState !== undefined) &&
+      !isCoursewareReferenceEnabled()
+    ) {
       return apiError('INVALID_REQUEST', 400, 'Courseware references are disabled');
     }
 
     let elementReference;
+    let interactiveStateNote;
     try {
-      elementReference = resolveElementReference(body);
+      ({ elementReference, stateNote: interactiveStateNote } = attachInteractiveState(
+        body,
+        resolveElementReference(body),
+      ));
     } catch (error) {
       if (error instanceof ElementReferenceValidationError) {
         return apiError('INVALID_REQUEST', 400, error.message);
@@ -231,6 +240,7 @@ export async function POST(req: NextRequest) {
         await runPiDirectorLoop({
           body,
           elementReference,
+          interactiveStateNote,
           agentConfigs,
           send,
           languageModel,
